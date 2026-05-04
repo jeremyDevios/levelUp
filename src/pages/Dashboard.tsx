@@ -4,6 +4,7 @@ import useMachines from '../hooks/useMachines'
 import { getLastSessionForUserAndMachine, saveSession, updateUserWeight } from '../lib/sessions'
 import { firestore } from '../lib/firebase'
 import { getWeightHistory, addWeightEntry } from '../lib/weights'
+import MuscleDiagram from '../components/MuscleDiagram'
 import type { Machine, SetItem } from '../types/firestore'
 import pkg from '../../package.json'
 
@@ -359,6 +360,12 @@ export default function Dashboard() {
 
         {selectedMachine && (
           <>
+            {/* Muscle diagram */}
+            <MuscleDiagram
+              machineId={selectedMachine.id}
+              category={(selectedMachine as any).category}
+            />
+
             {/* Session header */}
             <div className="flex items-center justify-between">
               <div>

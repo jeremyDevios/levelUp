@@ -20,6 +20,11 @@
 
   --radius-md: 12px;
   --nav-height: 64px;
+
+  --muscle-body:    #c8d3e0;
+  --muscle-inactive:#c8d3e0;
+  --muscle-line:    #7a9abf;
+  --muscle-outline: rgba(50,75,120,0.15);
 }
 
 /* ─── Dark tokens ───────────────────────────────────────────── */
@@ -37,6 +42,11 @@
 
   --glass-bg:     rgba(255,255,255,0.04);
   --glass-border: rgba(255,255,255,0.08);
+
+  --muscle-body:    #1e2a40;
+  --muscle-inactive:#1e2a40;
+  --muscle-line:    #4a7aaa;
+  --muscle-outline: rgba(100,140,200,0.2);
 }
 
 /* ─── Base ──────────────────────────────────────────────────── */
