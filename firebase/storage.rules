@@ -1,0 +1,45 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // User images stored under: user_images/{uid}/{file}
+    // - only the authenticated user with matching uid can upload/overwrite
+    // - enforce content-type starts with image/ and limit size to 5 MiB
+    // - files are readable publicly (change to authenticated-only if desired)
+    match /user_images/{userId}/{fileName} {
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.size <= 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+
+      // Public read (use App Check or signed URLs if you must restrict reads)
+      allow read: if true;
+    }
+
+    // Machine images: stored under machines/{machineId}/images/{imageName}
+    // - Only authenticated users may upload (you can further restrict to owner or roles)
+    // - Enforce contentType starts with image/ and max size 5 MiB
+    // - Reads are public by default to support direct CDN delivery. If you prefer privacy,
+    //   change to allow read: if request.auth != null or serve via signed URLs.
+    match /machines/{machineId}/images/{imageName} {
+      allow write: if request.auth != null
+                   && request.resource.size <= 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+
+      // Public read for convenience; consider App Check or signed URLs if you need access control
+      allow read: if true;
+    }
+
+    // Optional: public assets
+    match /public/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null; // limited write for authenticated users
+    }
+
+    // Default deny
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

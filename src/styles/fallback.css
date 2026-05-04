@@ -1,0 +1,15 @@
+/* src/styles/fallback.css */
+:root {
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: #f8fafc; /* light gray */
+  color: #0f172a;
+}
+h1 { font-size: 1.5rem; margin: 0 0 0.5rem 0; }
+p { margin: 0 0 0.5rem 0; }
+button { font: inherit; cursor: pointer; padding: .4rem .8rem; border-radius: .375rem; border: 1px solid rgba(0,0,0,.08); background: #fff; }
+.container { max-width: 980px; margin: 24px auto; padding: 16px; }

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.git/
+.firebase/
+coverage/
+.e2e/
+playwright-report/
+test-results/
+*.log

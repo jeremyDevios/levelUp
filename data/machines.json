@@ -1,0 +1,8 @@
+[
+  {
+    "id": "machine_sample_1",
+    "name": "Bench Press",
+    "description": "Flat bench press - barbell",
+    "image": "/assets/machines/bench.jpg"
+  }
+]

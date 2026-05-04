@@ -1,0 +1,47 @@
+# ── Dependencies ──────────────────────────────────────────────────────────────
+node_modules/
+
+# ── Build output ──────────────────────────────────────────────────────────────
+dist/
+.vite/
+
+# ── Environment variables (contiennent les clés Firebase) ─────────────────────
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+
+# ── Firebase ──────────────────────────────────────────────────────────────────
+# Clés de compte de service (accès admin complet — ne jamais commiter)
+*-service-account*.json
+*-firebase-adminsdk*.json
+serviceAccountKey.json
+firebase-service-account.json
+
+# État local Firebase et logs de débogage
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+ui-debug.log
+
+# ── OS & éditeurs ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/settings.json
+
+# ── Tests & couverture ────────────────────────────────────────────────────────
+coverage/
+.e2e/
+playwright-report/
+test-results/
+
+# ── Certificats & clés privées ────────────────────────────────────────────────
+*.pem
+*.key
+*.p12
+*.pfx

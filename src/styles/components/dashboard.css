@@ -1,0 +1,300 @@
+/* Dashboard component styles (mobile-first)
+   Path: src/styles/components/dashboard.css
+
+   Notes:
+   - Provides CSS custom properties (tokens) for spacing, type scale and colors.
+   - Supports light + dark themes via .dark on html or body.
+   - Mobile-first with responsive breakpoints for larger screens.
+   - Tailwind-compatible utility class examples are shown in comments; pure CSS fallbacks implemented.
+
+   Primary brand: gradient based on #F4941A
+*/
+
+:root {
+  /* Spacing scale (8px base) */
+  --space-0: 4px;
+  --space-1: 8px;
+  --space-2: 12px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 32px;
+
+  /* Border radius */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+
+  /* Elevation */
+  --shadow-1: 0 6px 18px rgba(8, 12, 20, 0.06);
+  --shadow-2: 0 12px 28px rgba(8, 12, 20, 0.08);
+
+  /* Typography scale (mobile-first) */
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  --fs-xs: 12px;
+  --fs-sm: 14px;
+  --fs-base: 16px;
+  --fs-lg: 18px;
+  --fs-xl: 22px;
+  --fw-regular: 400;
+  --fw-medium: 600;
+
+  /* Primary gradient */
+  --primary-start: #F4941A;
+  --primary-end: #FFB86B;
+
+  /* Light theme colors */
+  --bg: #F6F7F9;
+  --panel-bg: rgba(255,255,255,0.7); /* glass panel */
+  --muted: #6B7280;
+  --text: #0B1220;
+  --accent: var(--primary-start);
+  --success: #2ECC71;
+  --danger: #FF6B6B;
+
+  /* Utility */
+  --glass-alpha: 0.55;
+}
+
+/* Dark theme tokens (.dark on html or body) */
+.dark, html.dark {
+  --bg: #0B0F13;
+  --panel-bg: rgba(20,24,30,0.45);
+  --muted: #9AA3B2;
+  --text: #E6EEF3;
+  --accent: #F7A53A; /* slightly lighter for contrast */
+  --success: #3DDC84;
+  --danger: #FF7A7A;
+  --glass-alpha: 0.18;
+}
+
+/* Layout helpers */
+.lu-container {
+  /* Mobile-first container */
+  width: 100%;
+  padding: var(--space-3);
+  background: var(--bg);
+  min-height: 100vh;
+  box-sizing: border-box;
+  font-family: var(--font-family);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Header with liquid glass gradient and soft blur */
+.lu-header {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(var(--space-2));
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, rgba(255,255,255,var(--glass-alpha)), rgba(255,255,255,0.03));
+  box-shadow: var(--shadow-1);
+  backdrop-filter: blur(10px) saturate(120%);
+}
+
+/* Decorative accent strip with brand gradient */
+.lu-header::before {
+  content: "";
+  display:inline-block;
+  height: 44px;
+  width: 6px;
+  border-radius: 6px;
+  margin-right: var(--space-2);
+  background: linear-gradient(180deg, var(--primary-start), var(--primary-end));
+}
+
+.lu-title {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-medium);
+}
+
+.lu-subtitle {
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+
+/* Machine selector (segmented control) */
+.lu-machine-select {
+  display:flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.lu-machine-pill {
+  display:inline-flex;
+  align-items:center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: transparent;
+  border-radius: 999px;
+  border: 1px solid rgba(11,18,32,0.06);
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+
+.dark .lu-machine-pill { border-color: rgba(255,255,255,0.06); }
+
+.lu-machine-pill.active {
+  background: linear-gradient(90deg, var(--primary-start), var(--primary-end));
+  color: white;
+  box-shadow: var(--shadow-2);
+}
+
+/* Session list / table
+   Mobile-first: stacked cards. On md+ show a compact table-like row grid.
+*/
+.lu-session-table {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.lu-session-card {
+  background: var(--panel-bg);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  display:flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.lu-session-row {
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.lu-session-meta {
+  display:flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lu-session-title {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+}
+
+.lu-session-sub {
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+
+/* Set row (for reps/weights) */
+.lu-set-row {
+  display:flex;
+  gap: var(--space-2);
+  align-items:center;
+}
+
+.lu-set-item {
+  background: rgba(11,18,32,0.03);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+}
+
+.dark .lu-set-item { background: rgba(255,255,255,0.03); }
+
+/* Buttons */
+.lu-btn {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  border: none;
+  transition: transform 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+}
+
+.lu-btn:focus { outline: 3px solid rgba(244,148,26,0.18); outline-offset: 2px; }
+
+.lu-save-btn {
+  background: linear-gradient(90deg, var(--primary-start), var(--primary-end));
+  color: white;
+  box-shadow: 0 8px 20px rgba(244,148,26,0.18);
+}
+
+.lu-save-btn.secondary {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid rgba(11,18,32,0.06);
+}
+
+.lu-btn:active { transform: translateY(1px); }
+
+/* Compact controls area */
+.lu-controls {
+  display:flex;
+  gap: var(--space-2);
+  align-items:center;
+}
+
+/* Responsive: md and up
+   Keep mobile-first: switch to horizontal table layout for sessions on larger screens
+*/
+@media (min-width: 768px) {
+  .lu-container { padding: var(--space-4); }
+  .lu-session-table {
+    display: block;
+  }
+
+  .lu-session-card {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: calc(var(--space-3));
+  }
+
+  .lu-session-meta { flex: 1; }
+  .lu-set-row { gap: var(--space-3); }
+}
+
+/* Utility small variants for inline usage */
+.lu-muted { color: var(--muted); font-size: var(--fs-sm); }
+.lu-chip { padding: 4px 8px; border-radius: 999px; background: rgba(11,18,32,0.04); font-size: var(--fs-xs); }
+.dark .lu-chip { background: rgba(255,255,255,0.02); }
+
+/* Accessibility: reduce motion */
+@media (prefers-reduced-motion: reduce) {
+  .lu-btn { transition: none; }
+}
+
+/* Tailwind-compatible example usage (for developer reference)
+
+  <div class="lu-container">
+    <header class="lu-header">
+      <div class="lu-title">Dashboard</div>
+      <div class="lu-controls">
+        <div class="lu-machine-select">
+          <button class="lu-machine-pill active">All</button>
+          <button class="lu-machine-pill">Upper</button>
+        </div>
+        <button class="lu-btn lu-save-btn">Save</button>
+      </div>
+    </header>
+
+    <div class="lu-session-table">
+      <article class="lu-session-card">
+        <div class="lu-session-meta">
+          <div class="lu-session-title">Push Day</div>
+          <div class="lu-session-sub">3 sets • 45 min</div>
+        </div>
+        <div class="lu-set-row">
+          <div class="lu-set-item">5x5 100kg</div>
+          <div class="lu-set-item">AMRAP</div>
+        </div>
+      </article>
+    </div>
+  </div>
+
+*/
