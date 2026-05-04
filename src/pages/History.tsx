@@ -7,6 +7,16 @@ import { firestore } from '../lib/firebase'
 import { updateWeightEntry, deleteWeightEntry } from '../lib/weights'
 import useMachines from '../hooks/useMachines'
 import type { Session, SetItem, WeightEntry } from '../types/firestore'
+import { getSetInputMode } from '../types/firestore'
+
+/** Résumé d'une série selon le mode de saisie */
+function formatSetSummary(s: SetItem, machineId: string): string {
+  const mode = getSetInputMode(machineId)
+  if (mode === 'planche')  return s.durationSec !== undefined ? `${s.durationSec}s` : '—'
+  if (mode === 'climber')  return [s.powerPercent !== undefined ? `${s.powerPercent}%` : null, s.durationMin !== undefined ? `${s.durationMin}min` : null].filter(Boolean).join(' · ') || '—'
+  if (mode === 'tapis')    return [s.slope !== undefined ? `${s.slope}%` : null, s.speedKmh !== undefined ? `${s.speedKmh}km/h` : null, s.durationMin !== undefined ? `${s.durationMin}min` : null].filter(Boolean).join(' · ') || '—'
+  return `${s.reps ?? 0}r${s.weightKg ? ` × ${s.weightKg}kg` : ''}`
+}
 
 // ─── Mini SVG area chart ───────────────────────────────────────────────────
 function MiniChart({ data, height = 64 }: { data: { date: string; value: number }[]; height?: number }) {
@@ -96,6 +106,23 @@ function EmptyState({ text }: { text: string }) {
   )
 }
 
+// ─── Reusable edit cell ────────────────────────────────────────────────────────
+function EditCell({ value, unit, inputMode, onChange, primary, placeholder, min, max }: {
+  value?: number; unit: string; inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']
+  onChange: (v: number | undefined) => void; primary?: boolean; placeholder?: string; min?: number; max?: number
+}) {
+  return (
+    <div className="flex items-center gap-1 rounded-lg px-2 py-1.5"
+      style={{ background: 'var(--input-bg)', border: `1px solid ${primary ? 'var(--color-primary)' : 'var(--glass-border)'}` }}>
+      <input type="number" inputMode={inputMode} value={value ?? ''} min={min} max={max}
+        onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+        placeholder={placeholder ?? '0'}
+        className="w-full bg-transparent text-center text-sm font-semibold focus:outline-none" style={{ color: 'var(--text)' }} />
+      <span className="text-xs flex-shrink-0" style={{ color: 'var(--muted)' }}>{unit}</span>
+    </div>
+  )
+}
+
 // ─── Session card ──────────────────────────────────────────────────────────
 function SessionCard({
   session, machineName, showDate, progressionData, onSelect,
@@ -108,6 +135,10 @@ function SessionCard({
 }) {
   const totalSets = session.sets?.length ?? 0
   const maxWeight = Math.max(0, ...(session.sets?.map((s) => s.weightKg ?? 0) ?? [0]))
+  const mode = getSetInputMode(session.machineId)
+  const subtitle = mode === 'standard'
+    ? `${totalSets} série${totalSets > 1 ? 's' : ''}${maxWeight > 0 ? ` · max ${maxWeight} kg` : ''}`
+    : `${totalSets} série${totalSets > 1 ? 's' : ''}`
   return (
     <div className="rounded-xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--glass-border)' }}>
       <button onClick={onSelect} className="w-full flex items-center justify-between px-4 py-3 text-left active:opacity-70">
@@ -118,15 +149,13 @@ function SessionCard({
             </p>
           )}
           <p className="font-semibold text-sm truncate" style={{ color: 'var(--text)' }}>{machineName}</p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-            {totalSets} série{totalSets > 1 ? 's' : ''}{maxWeight > 0 ? ` · max ${maxWeight} kg` : ''}
-          </p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{subtitle}</p>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0 ml-3">
           <div className="text-right">
             {session.sets?.slice(0, 3).map((s, i) => (
               <p key={i} className="text-xs leading-tight" style={{ color: 'var(--muted)' }}>
-                {s.reps}r{s.weightKg ? ` × ${s.weightKg}kg` : ''}
+                {formatSetSummary(s, session.machineId)}
               </p>
             ))}
             {(session.sets?.length ?? 0) > 3 && (
@@ -196,40 +225,68 @@ function SessionEditPopup({
         </div>
 
         <div className="overflow-y-auto flex-1 px-5 py-4 space-y-3">
-          {/* Column headers */}
-          <div
-            className="grid text-[10px] font-bold tracking-widest pb-2"
-            style={{ gridTemplateColumns: '56px 1fr 1fr 36px', color: 'var(--muted)', borderBottom: '1px solid var(--glass-border)' }}
-          >
-            <span>SÉRIE</span><span className="text-center">REPS</span><span className="text-center">POIDS</span><span />
-          </div>
+          {(() => {
+            const mode = getSetInputMode(session.machineId)
+            const isPlanche = mode === 'planche'
+            const isClimber = mode === 'climber'
+            const isTapis   = mode === 'tapis'
+            const gridCols  = isTapis ? '56px 1fr 1fr 1fr 36px' : isClimber ? '56px 1fr 1fr 36px' : isPlanche ? '56px 1fr 36px' : '56px 1fr 1fr 36px'
+            const headers   = isTapis
+              ? ['SÉRIE', 'PENTE', 'VITESSE', 'DURÉE', '']
+              : isClimber ? ['SÉRIE', 'PUIS.', 'DURÉE', '']
+              : isPlanche ? ['SÉRIE', 'DURÉE', '']
+              : ['SÉRIE', 'REPS', 'POIDS', '']
 
-          {sets.map((set, i) => (
-            <div key={i} className="grid items-center gap-2" style={{ gridTemplateColumns: '56px 1fr 1fr 36px' }}>
-              <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>Série {i + 1}</span>
-              <div className="flex items-center gap-1 rounded-lg px-2 py-1.5" style={{ background: 'var(--input-bg)', border: '1px solid var(--color-primary)' }}>
-                <input type="number" inputMode="numeric" value={set.reps || ''} onChange={(e) => updateSet(i, { reps: Number(e.target.value) })}
-                  className="w-full bg-transparent text-center text-sm font-semibold focus:outline-none" style={{ color: 'var(--text)' }} />
-                <span className="text-xs" style={{ color: 'var(--muted)' }}>r</span>
+            return (<>
+              {/* Column headers */}
+              <div className="grid text-[10px] font-bold tracking-widest pb-2"
+                style={{ gridTemplateColumns: gridCols, color: 'var(--muted)', borderBottom: '1px solid var(--glass-border)' }}>
+                {headers.map((h, i) => <span key={i} className={i > 0 ? 'text-center' : ''}>{h}</span>)}
               </div>
-              <div className="flex items-center gap-1 rounded-lg px-2 py-1.5" style={{ background: 'var(--input-bg)', border: '1px solid var(--glass-border)' }}>
-                <input type="number" inputMode="decimal" value={set.weightKg ?? ''} placeholder="—"
-                  onChange={(e) => updateSet(i, { weightKg: e.target.value ? Number(e.target.value) : undefined })}
-                  className="w-full bg-transparent text-center text-sm font-semibold focus:outline-none" style={{ color: 'var(--text)' }} />
-                <span className="text-xs" style={{ color: 'var(--muted)' }}>kg</span>
-              </div>
-              <button
-                onClick={() => setSets((prev) => prev.filter((_, idx) => idx !== i))}
-                disabled={sets.length <= 1}
-                className="w-8 h-8 rounded-full flex items-center justify-center"
-                style={{ color: sets.length <= 1 ? 'var(--glass-border)' : '#ef4444', background: sets.length <= 1 ? 'transparent' : 'rgba(239,68,68,0.1)' }}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          ))}
+
+              {sets.map((set, i) => (
+                <div key={i} className="grid items-center gap-1" style={{ gridTemplateColumns: gridCols }}>
+                  <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>Série {i + 1}</span>
+
+                  {isPlanche && (
+                    <EditCell value={set.durationSec} unit="sec" inputMode="numeric"
+                      onChange={(v) => updateSet(i, { durationSec: v })} primary />
+                  )}
+                  {isClimber && (<>
+                    <EditCell value={set.powerPercent} unit="%" inputMode="numeric" min={0} max={100}
+                      onChange={(v) => updateSet(i, { powerPercent: v })} primary />
+                    <EditCell value={set.durationMin} unit="min" inputMode="decimal"
+                      onChange={(v) => updateSet(i, { durationMin: v })} />
+                  </>)}
+                  {isTapis && (<>
+                    <EditCell value={set.slope} unit="%" inputMode="numeric" min={0} max={100}
+                      onChange={(v) => updateSet(i, { slope: v })} primary />
+                    <EditCell value={set.speedKmh} unit="km/h" inputMode="decimal"
+                      onChange={(v) => updateSet(i, { speedKmh: v })} />
+                    <EditCell value={set.durationMin} unit="min" inputMode="decimal"
+                      onChange={(v) => updateSet(i, { durationMin: v })} />
+                  </>)}
+                  {!isPlanche && !isClimber && !isTapis && (<>
+                    <EditCell value={set.reps} unit="r" inputMode="numeric"
+                      onChange={(v) => updateSet(i, { reps: v })} primary />
+                    <EditCell value={set.weightKg} unit="kg" inputMode="decimal" placeholder="—"
+                      onChange={(v) => updateSet(i, { weightKg: v })} />
+                  </>)}
+
+                  <button
+                    onClick={() => setSets((prev) => prev.filter((_, idx) => idx !== i))}
+                    disabled={sets.length <= 1}
+                    className="w-8 h-8 rounded-full flex items-center justify-center"
+                    style={{ color: sets.length <= 1 ? 'var(--glass-border)' : '#ef4444', background: sets.length <= 1 ? 'transparent' : 'rgba(239,68,68,0.1)' }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </>)
+          })()}
 
           <button onClick={() => setSets((prev) => [...prev, { ...(prev[prev.length - 1] ?? { reps: 8 }) }])}
             className="w-full py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-1"
@@ -239,7 +296,6 @@ function SessionEditPopup({
             </svg>
             Ajouter une série
           </button>
-
           <button onClick={handleSave} disabled={saving}
             className="w-full py-3 rounded-xl text-sm font-bold text-white"
             style={{ background: 'var(--gradient-primary)', opacity: saving ? 0.7 : 1 }}>

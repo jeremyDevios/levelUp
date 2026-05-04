@@ -6,6 +6,7 @@ import { firestore } from '../lib/firebase'
 import { getWeightHistory, addWeightEntry } from '../lib/weights'
 import MuscleDiagram from '../components/MuscleDiagram'
 import type { Machine, SetItem } from '../types/firestore'
+import { getSetInputMode, defaultSet } from '../types/firestore'
 import pkg from '../../package.json'
 
 function getCategoryIcon(category?: string, className?: string): React.ReactElement {
@@ -119,6 +120,39 @@ function MachineIcon({ machine, className }: { machine: Machine | null; classNam
 }
 
 
+// ─── Reusable number input cell ───────────────────────────────────────────────
+function NumInput({
+  value, unit, inputMode, onChange, primary, placeholder, min, max,
+}: {
+  value?: number
+  unit: string
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']
+  onChange: (v: number | undefined) => void
+  primary?: boolean
+  placeholder?: string
+  min?: number
+  max?: number
+}) {
+  return (
+    <div className="flex justify-center">
+      <div className="flex items-center gap-1 rounded-lg px-2 py-1.5 w-full mx-1"
+        style={{ background: 'var(--input-bg)', border: `1px solid ${primary ? 'var(--color-primary)' : 'var(--glass-border)'}` }}>
+        <input
+          type="number"
+          inputMode={inputMode}
+          value={value ?? ''}
+          min={min} max={max}
+          onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+          className="w-full bg-transparent text-center font-semibold text-sm focus:outline-none"
+          style={{ color: 'var(--text)' }}
+          placeholder={placeholder ?? '0'}
+        />
+        <span className="text-xs flex-shrink-0" style={{ color: 'var(--muted)' }}>{unit}</span>
+      </div>
+    </div>
+  )
+}
+
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60)
   const s = seconds % 60
@@ -131,7 +165,7 @@ export default function Dashboard() {
 
   const [showPicker, setShowPicker] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [sets, setSets] = useState<SetItem[]>([{ reps: 8, weightKg: undefined }])
+  const [sets, setSets] = useState<SetItem[]>([{ reps: 8 }])
   const [restSeconds, setRestSeconds] = useState(60)
   const [sessionDate, setSessionDate] = useState<string>(new Date().toISOString().slice(0, 10))
   const [userWeightKg, setUserWeightKg] = useState<number | undefined>()
@@ -160,7 +194,7 @@ export default function Dashboard() {
         setSets(s.sets)
         if (typeof s.restSeconds === 'number') setRestSeconds(s.restSeconds)
       } else {
-        setSets([{ reps: 8, weightKg: undefined }])
+        setSets([defaultSet(getSetInputMode(selectedId))])
       }
     })()
     return () => { mounted = false }
@@ -178,7 +212,7 @@ export default function Dashboard() {
     setSets((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)))
 
   const addSet = () =>
-    setSets((prev) => [...prev, { ...(prev[prev.length - 1] ?? { reps: 8 }) }])
+    setSets((prev) => [...prev, { ...(prev[prev.length - 1] ?? defaultSet(getSetInputMode(selectedId ?? ''))) }])
 
   const removeSet = (i: number) =>
     setSets((prev) => prev.filter((_, idx) => idx !== i))
@@ -192,13 +226,21 @@ export default function Dashboard() {
         userId: user.uid,
         machineId: selectedId,
         date: sessionDate,
-        sets: sets.map((s, i) => ({
-          index: i,
-          reps: s.reps || 0,
-          weightKg: s.weightKg ?? 0,
-          note: s.note ?? '',
-          dropped: !!s.dropped,
-        })),
+        sets: sets.map((s, i) => {
+          const raw: Record<string, unknown> = {
+            index: i,
+            reps: s.reps ?? 0,
+            weightKg: s.weightKg ?? 0,
+            note: s.note ?? '',
+            dropped: !!s.dropped,
+          }
+          if (s.durationSec  !== undefined) raw.durationSec  = s.durationSec
+          if (s.powerPercent !== undefined) raw.powerPercent = s.powerPercent
+          if (s.durationMin  !== undefined) raw.durationMin  = s.durationMin
+          if (s.slope        !== undefined) raw.slope        = s.slope
+          if (s.speedKmh     !== undefined) raw.speedKmh     = s.speedKmh
+          return raw
+        }) as any,
         restSeconds,
         userWeightKg,
         meta: { appVersion: (pkg as any).version ?? 'unknown' },
@@ -391,111 +433,103 @@ export default function Dashboard() {
             </div>
 
             {/* Sets table */}
-            <div className="rounded-xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--glass-border)' }}>
-              {/* Table header */}
-              <div className="px-4 pt-3 pb-2" style={{ borderBottom: '1px solid var(--glass-border)' }}>
-                <p className="text-[10px] font-bold tracking-widest" style={{ color: 'var(--muted)' }}>
-                  DÉTAIL DES SÉRIES DE LA SESSION
-                </p>
-              </div>
-              <div
-                className="grid px-4 py-2 text-[10px] font-bold tracking-widest"
-                style={{ gridTemplateColumns: '80px 1fr 1fr 32px', color: 'var(--muted)' }}
-              >
-                <span>SÉRIE</span>
-                <span className="text-center">REPS</span>
-                <span className="text-center">POIDS (kg)</span>
-                <span />
-              </div>
+            {(() => {
+              const inputMode = getSetInputMode(selectedMachine.id)
+              const isTapis   = inputMode === 'tapis'
+              const isClimber = inputMode === 'climber'
+              const isPlanche = inputMode === 'planche'
 
-              {/* Set rows */}
-              {sets.map((set, i) => (
-                <div
-                  key={i}
-                  className="grid items-center px-4 py-2"
-                  style={{
-                    gridTemplateColumns: '80px 1fr 1fr 32px',
-                    borderTop: '1px solid var(--glass-border)',
-                  }}
-                >
-                  <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>
-                    Série {i + 1}
-                  </span>
+              const gridCols = isTapis
+                ? '70px 1fr 1fr 1fr 32px'
+                : isClimber
+                ? '70px 1fr 1fr 32px'
+                : isPlanche
+                ? '70px 1fr 32px'
+                : '80px 1fr 1fr 32px'
 
-                  {/* Reps input */}
-                  <div className="flex justify-center">
-                    <div
-                      className="flex items-center gap-1 rounded-lg px-3 py-1.5"
-                      style={{
-                        background: 'var(--input-bg)',
-                        border: '1px solid var(--color-primary)',
-                      }}
-                    >
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        value={set.reps || ''}
-                        onChange={(e) => updateSet(i, { reps: Number(e.target.value) })}
-                        className="w-8 bg-transparent text-center font-semibold text-sm focus:outline-none"
-                        style={{ color: 'var(--text)' }}
-                      />
-                      <span className="text-xs" style={{ color: 'var(--muted)' }}>reps</span>
-                    </div>
+              const headers = isTapis
+                ? ['SÉRIE', 'PENTE (%)', 'VITESSE (km/h)', 'DURÉE (min)', '']
+                : isClimber
+                ? ['SÉRIE', 'PUISSANCE (%)', 'DURÉE (min)', '']
+                : isPlanche
+                ? ['SÉRIE', 'DURÉE (sec)', '']
+                : ['SÉRIE', 'REPS', 'POIDS (kg)', '']
+
+              return (
+                <div className="rounded-xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--glass-border)' }}>
+                  <div className="px-4 pt-3 pb-2" style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                    <p className="text-[10px] font-bold tracking-widest" style={{ color: 'var(--muted)' }}>
+                      DÉTAIL DES SÉRIES DE LA SESSION
+                    </p>
                   </div>
 
-                  {/* Weight input */}
-                  <div className="flex justify-center">
-                    <div
-                      className="flex items-center gap-1 rounded-lg px-3 py-1.5"
-                      style={{
-                        background: 'var(--input-bg)',
-                        border: '1px solid var(--glass-border)',
-                      }}
-                    >
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        value={set.weightKg ?? ''}
-                        onChange={(e) => updateSet(i, { weightKg: e.target.value ? Number(e.target.value) : undefined })}
-                        className="w-10 bg-transparent text-center font-semibold text-sm focus:outline-none"
-                        style={{ color: 'var(--text)' }}
-                        placeholder="—"
-                      />
-                      <span className="text-xs" style={{ color: 'var(--muted)' }}>kg</span>
-                    </div>
+                  {/* Header */}
+                  <div className="grid px-4 py-2 text-[10px] font-bold tracking-widest"
+                    style={{ gridTemplateColumns: gridCols, color: 'var(--muted)' }}>
+                    {headers.map((h, i) => (
+                      <span key={i} className={i > 0 && i < headers.length - 1 ? 'text-center' : ''}>{h}</span>
+                    ))}
                   </div>
 
-                  {/* Remove */}
-                  <button
-                    onClick={() => removeSet(i)}
-                    disabled={sets.length <= 1}
-                    className="flex items-center justify-center w-7 h-7 rounded-full"
-                    style={{
-                      color: sets.length <= 1 ? 'var(--glass-border)' : '#ef4444',
-                      background: sets.length <= 1 ? 'transparent' : 'rgba(239,68,68,0.1)',
-                    }}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+                  {/* Set rows */}
+                  {sets.map((set, i) => (
+                    <div key={i} className="grid items-center px-4 py-2"
+                      style={{ gridTemplateColumns: gridCols, borderTop: '1px solid var(--glass-border)' }}>
+                      <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>Série {i + 1}</span>
+
+                      {isPlanche && (
+                        <NumInput value={set.durationSec} unit="sec" inputMode="numeric"
+                          onChange={(v) => updateSet(i, { durationSec: v })} primary />
+                      )}
+
+                      {isClimber && (<>
+                        <NumInput value={set.powerPercent} unit="%" inputMode="numeric" min={0} max={100}
+                          onChange={(v) => updateSet(i, { powerPercent: v })} primary />
+                        <NumInput value={set.durationMin} unit="min" inputMode="decimal"
+                          onChange={(v) => updateSet(i, { durationMin: v })} />
+                      </>)}
+
+                      {isTapis && (<>
+                        <NumInput value={set.slope} unit="%" inputMode="numeric" min={0} max={100}
+                          onChange={(v) => updateSet(i, { slope: v })} primary />
+                        <NumInput value={set.speedKmh} unit="km/h" inputMode="decimal"
+                          onChange={(v) => updateSet(i, { speedKmh: v })} />
+                        <NumInput value={set.durationMin} unit="min" inputMode="decimal"
+                          onChange={(v) => updateSet(i, { durationMin: v })} />
+                      </>)}
+
+                      {!isPlanche && !isClimber && !isTapis && (<>
+                        <NumInput value={set.reps} unit="reps" inputMode="numeric"
+                          onChange={(v) => updateSet(i, { reps: v })} primary />
+                        <NumInput value={set.weightKg} unit="kg" inputMode="decimal" placeholder="—"
+                          onChange={(v) => updateSet(i, { weightKg: v })} />
+                      </>)}
+
+                      {/* Remove */}
+                      <button onClick={() => removeSet(i)} disabled={sets.length <= 1}
+                        className="flex items-center justify-center w-7 h-7 rounded-full"
+                        style={{ color: sets.length <= 1 ? 'var(--glass-border)' : '#ef4444', background: sets.length <= 1 ? 'transparent' : 'rgba(239,68,68,0.1)' }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Add set */}
+                  <div className="px-4 py-3" style={{ borderTop: '1px solid var(--glass-border)' }}>
+                    <button onClick={addSet}
+                      className="w-full py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-1"
+                      style={{ background: 'var(--surface-2)', color: 'var(--color-primary)' }}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                      </svg>
+                      Ajouter une série
+                    </button>
+                  </div>
                 </div>
-              ))}
-
-              {/* Add set */}
-              <div className="px-4 py-3" style={{ borderTop: '1px solid var(--glass-border)' }}>
-                <button
-                  onClick={addSet}
-                  className="w-full py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-1"
-                  style={{ background: 'var(--surface-2)', color: 'var(--color-primary)' }}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                  </svg>
-                  Ajouter une série
-                </button>
-              </div>
-            </div>
+              )
+            })()}
 
             {/* Rest time */}
             <div className="rounded-xl px-4 py-3" style={{ background: 'var(--surface)', border: '1px solid var(--glass-border)' }}>

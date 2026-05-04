@@ -23,10 +23,32 @@ export interface Machine {
 
 export interface SetItem {
   id?: string
-  reps: number
-  weightKg?: number
+  reps?: number          // standard: répétitions
+  weightKg?: number      // standard: poids
+  durationSec?: number   // planche: durée en secondes
+  powerPercent?: number  // climber / marches-infinies: puissance 0-100
+  durationMin?: number   // climber / marches-infinies / tapis: durée en minutes
+  slope?: number         // tapis-de-course: pente 0-100
+  speedKmh?: number      // tapis-de-course: vitesse km/h
   note?: string
   dropped?: boolean
+}
+
+/** Détermine le mode de saisie selon la machine */
+export type SetInputMode = 'standard' | 'planche' | 'climber' | 'tapis'
+
+export function getSetInputMode(machineId: string): SetInputMode {
+  if (machineId === 'planche') return 'planche'
+  if (machineId === 'climber-cardio' || machineId === 'marches-infinies') return 'climber'
+  if (machineId === 'tapis-de-course') return 'tapis'
+  return 'standard'
+}
+
+export function defaultSet(mode: SetInputMode): SetItem {
+  if (mode === 'planche')  return { durationSec: 30 }
+  if (mode === 'climber')  return { powerPercent: 50, durationMin: 10 }
+  if (mode === 'tapis')    return { slope: 0, speedKmh: 6, durationMin: 20 }
+  return { reps: 8 }
 }
 
 export interface Session {

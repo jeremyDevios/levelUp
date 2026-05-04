@@ -50,6 +50,7 @@ const MACHINE_MUSCLES: Record<string, MuscleId[]> = {
   'glute':                       ['glute', 'hamstring'],
   'climber':                     ['quad', 'glute', 'calf', 'abs'],
   'climber-cardio':              ['quad', 'glute', 'calf', 'abs'],
+  'planche':                     ['abs', 'oblique', 'lower_back', 'deltoid', 'tricep'],
   'excite-recline':              ['quad', 'glute', 'hamstring'],
   'wave':                        ['lat', 'tricep', 'deltoid', 'bicep'],
   'velo':                        ['quad', 'hamstring', 'calf', 'glute'],
