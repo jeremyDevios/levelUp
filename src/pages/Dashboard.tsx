@@ -164,6 +164,7 @@ export default function Dashboard() {
   const { machines } = useMachines()
 
   const [showPicker, setShowPicker] = useState(false)
+  const [pickerSearch, setPickerSearch] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [sets, setSets] = useState<SetItem[]>([{ reps: 8 }])
   const [restSeconds, setRestSeconds] = useState(60)
@@ -372,7 +373,7 @@ export default function Dashboard() {
             SÉLECTIONNER VOTRE MACHINE
           </p>
           <button
-            onClick={() => setShowPicker(true)}
+            onClick={() => { setShowPicker(true); setPickerSearch('') }}
             className="w-full flex items-center justify-between p-3 rounded-xl active:scale-98 transition-transform"
             style={{ background: 'var(--surface)', border: '1px solid var(--glass-border)' }}
           >
@@ -435,24 +436,27 @@ export default function Dashboard() {
             {/* Sets table */}
             {(() => {
               const inputMode = getSetInputMode(selectedMachine.id)
-              const isTapis   = inputMode === 'tapis'
-              const isClimber = inputMode === 'climber'
-              const isPlanche = inputMode === 'planche'
+              const isTapis    = inputMode === 'tapis'
+              const isClimber  = inputMode === 'climber'
+              const isPlanche  = inputMode === 'planche'
+              const isRepsOnly = inputMode === 'reps-only'
 
               const gridCols = isTapis
                 ? '70px 1fr 1fr 1fr 32px'
                 : isClimber
                 ? '70px 1fr 1fr 32px'
-                : isPlanche
+                : isPlanche || isRepsOnly
                 ? '70px 1fr 32px'
                 : '80px 1fr 1fr 32px'
 
               const headers = isTapis
-                ? ['SÉRIE', 'PENTE (%)', 'VITESSE (km/h)', 'DURÉE (min)', '']
+                ? ['SÉRIE', 'PENTE', 'VITESSE (km/h)', 'DURÉE (min)', '']
                 : isClimber
-                ? ['SÉRIE', 'PUISSANCE (%)', 'DURÉE (min)', '']
+                ? ['SÉRIE', 'PUISSANCE', 'DURÉE (min)', '']
                 : isPlanche
                 ? ['SÉRIE', 'DURÉE (sec)', '']
+                : isRepsOnly
+                ? ['SÉRIE', 'RÉPÉTITIONS', '']
                 : ['SÉRIE', 'REPS', 'POIDS (kg)', '']
 
               return (
@@ -482,15 +486,20 @@ export default function Dashboard() {
                           onChange={(v) => updateSet(i, { durationSec: v })} primary />
                       )}
 
+                      {isRepsOnly && (
+                        <NumInput value={set.reps} unit="reps" inputMode="numeric"
+                          onChange={(v) => updateSet(i, { reps: v })} primary />
+                      )}
+
                       {isClimber && (<>
-                        <NumInput value={set.powerPercent} unit="%" inputMode="numeric" min={0} max={100}
+                        <NumInput value={set.powerPercent} unit="" inputMode="numeric" min={0} max={100}
                           onChange={(v) => updateSet(i, { powerPercent: v })} primary />
                         <NumInput value={set.durationMin} unit="min" inputMode="decimal"
                           onChange={(v) => updateSet(i, { durationMin: v })} />
                       </>)}
 
                       {isTapis && (<>
-                        <NumInput value={set.slope} unit="%" inputMode="numeric" min={0} max={100}
+                        <NumInput value={set.slope} unit="" inputMode="numeric" min={0} max={100}
                           onChange={(v) => updateSet(i, { slope: v })} primary />
                         <NumInput value={set.speedKmh} unit="km/h" inputMode="decimal"
                           onChange={(v) => updateSet(i, { speedKmh: v })} />
@@ -498,7 +507,7 @@ export default function Dashboard() {
                           onChange={(v) => updateSet(i, { durationMin: v })} />
                       </>)}
 
-                      {!isPlanche && !isClimber && !isTapis && (<>
+                      {!isPlanche && !isRepsOnly && !isClimber && !isTapis && (<>
                         <NumInput value={set.reps} unit="reps" inputMode="numeric"
                           onChange={(v) => updateSet(i, { reps: v })} primary />
                         <NumInput value={set.weightKg} unit="kg" inputMode="decimal" placeholder="—"
@@ -669,39 +678,62 @@ export default function Dashboard() {
               </button>
             </div>
 
+            {/* Search input */}
+            <div className="px-5 pb-3">
+              <div className="flex items-center gap-2 rounded-xl px-3 py-2"
+                style={{ background: 'var(--input-bg)', border: '1px solid var(--glass-border)' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--muted)' }}>
+                  <circle cx="11" cy="11" r="8" /><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35" />
+                </svg>
+                <input
+                  type="text"
+                  autoFocus
+                  value={pickerSearch}
+                  onChange={(e) => setPickerSearch(e.target.value)}
+                  placeholder="Rechercher une machine..."
+                  className="flex-1 bg-transparent focus:outline-none"
+                  style={{ color: 'var(--text)', fontSize: 16 }}
+                />
+                {pickerSearch && (
+                  <button onClick={() => setPickerSearch('')} style={{ color: 'var(--muted)' }}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="overflow-y-auto flex-1">
-              {Object.entries(grouped).map(([cat, mList]) => (
-                <div key={cat}>
-                  <div
-                    className="px-5 py-2 text-[10px] font-bold tracking-widest uppercase"
-                    style={{ background: 'var(--surface-2)', color: 'var(--muted)' }}
-                  >
-                    {mList[0]?.categoryLabel ?? cat}
-                  </div>
-                  {mList.map((m) => {
+              {(() => {
+                const q = pickerSearch.trim().toLowerCase()
+                if (q) {
+                  // Flat filtered list, no category headers
+                  const filtered = machines.filter((m) =>
+                    m.name.toLowerCase().includes(q) ||
+                    (m.categoryLabel ?? m.category ?? '').toLowerCase().includes(q)
+                  )
+                  if (filtered.length === 0) {
+                    return (
+                      <p className="px-5 py-8 text-sm text-center" style={{ color: 'var(--muted)' }}>
+                        Aucune machine trouvée
+                      </p>
+                    )
+                  }
+                  return filtered.map((m) => {
                     const isSelected = m.id === selectedId
                     return (
-                      <button
-                        key={m.id}
-                        onClick={() => { setSelectedId(m.id); setShowPicker(false) }}
+                      <button key={m.id} onClick={() => { setSelectedId(m.id); setShowPicker(false) }}
                         className="w-full flex items-center gap-3 px-5 py-3 text-left"
-                        style={{
-                          borderBottom: '1px solid var(--glass-border)',
-                          background: isSelected ? 'rgba(59,126,248,0.08)' : 'transparent',
-                        }}
-                      >
-                        <div
-                          className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-                          style={{ background: 'var(--surface-2)', color: isSelected ? 'var(--color-primary)' : 'var(--muted)' }}
-                        >
+                        style={{ borderBottom: '1px solid var(--glass-border)', background: isSelected ? 'rgba(59,126,248,0.08)' : 'transparent' }}>
+                        <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                          style={{ background: 'var(--surface-2)', color: isSelected ? 'var(--color-primary)' : 'var(--muted)' }}>
                           <MachineIcon machine={m} className="w-5 h-5" />
                         </div>
-                        <span
-                          className="flex-1 text-sm font-medium"
-                          style={{ color: isSelected ? 'var(--color-primary)' : 'var(--text)' }}
-                        >
-                          {m.name}
-                        </span>
+                        <div className="flex-1 min-w-0">
+                          <span className="block text-sm font-medium" style={{ color: isSelected ? 'var(--color-primary)' : 'var(--text)' }}>{m.name}</span>
+                          <span className="block text-xs" style={{ color: 'var(--muted)' }}>{m.categoryLabel ?? m.category}</span>
+                        </div>
                         {isSelected && (
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4" style={{ color: 'var(--color-primary)' }}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -709,9 +741,39 @@ export default function Dashboard() {
                         )}
                       </button>
                     )
-                  })}
-                </div>
-              ))}
+                  })
+                }
+                // Normal grouped view
+                return Object.entries(grouped).map(([cat, mList]) => (
+                  <div key={cat}>
+                    <div className="px-5 py-2 text-[10px] font-bold tracking-widest uppercase"
+                      style={{ background: 'var(--surface-2)', color: 'var(--muted)' }}>
+                      {mList[0]?.categoryLabel ?? cat}
+                    </div>
+                    {mList.map((m) => {
+                      const isSelected = m.id === selectedId
+                      return (
+                        <button key={m.id} onClick={() => { setSelectedId(m.id); setShowPicker(false) }}
+                          className="w-full flex items-center gap-3 px-5 py-3 text-left"
+                          style={{ borderBottom: '1px solid var(--glass-border)', background: isSelected ? 'rgba(59,126,248,0.08)' : 'transparent' }}>
+                          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                            style={{ background: 'var(--surface-2)', color: isSelected ? 'var(--color-primary)' : 'var(--muted)' }}>
+                            <MachineIcon machine={m} className="w-5 h-5" />
+                          </div>
+                          <span className="flex-1 text-sm font-medium" style={{ color: isSelected ? 'var(--color-primary)' : 'var(--text)' }}>
+                            {m.name}
+                          </span>
+                          {isSelected && (
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4" style={{ color: 'var(--color-primary)' }}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                ))
+              })()}
             </div>
           </div>
         </div>

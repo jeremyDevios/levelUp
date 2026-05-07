@@ -46,6 +46,7 @@ const MACHINE_MUSCLES: Record<string, MuscleId[]> = {
   'abductor':                    ['glute', 'quad'],
   'abductor-cuisses':            ['glute', 'quad'],
   'cage-a-squat':                ['quad', 'glute', 'lower_back', 'hamstring'],
+  'squats':                      ['quad', 'glute', 'hamstring'],
   'hip-thrust':                  ['glute', 'hamstring', 'lower_back'],
   'glute':                       ['glute', 'hamstring'],
   'climber':                     ['quad', 'glute', 'calf', 'abs'],

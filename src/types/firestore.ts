@@ -35,19 +35,21 @@ export interface SetItem {
 }
 
 /** Détermine le mode de saisie selon la machine */
-export type SetInputMode = 'standard' | 'planche' | 'climber' | 'tapis'
+export type SetInputMode = 'standard' | 'planche' | 'climber' | 'tapis' | 'reps-only'
 
 export function getSetInputMode(machineId: string): SetInputMode {
   if (machineId === 'planche') return 'planche'
   if (machineId === 'climber-cardio' || machineId === 'marches-infinies') return 'climber'
   if (machineId === 'tapis-de-course') return 'tapis'
+  if (machineId === 'squats') return 'reps-only'
   return 'standard'
 }
 
 export function defaultSet(mode: SetInputMode): SetItem {
-  if (mode === 'planche')  return { durationSec: 30 }
-  if (mode === 'climber')  return { powerPercent: 50, durationMin: 10 }
-  if (mode === 'tapis')    return { slope: 0, speedKmh: 6, durationMin: 20 }
+  if (mode === 'planche')    return { durationSec: 30 }
+  if (mode === 'climber')    return { powerPercent: 0, durationMin: 10 }
+  if (mode === 'tapis')      return { slope: 0, speedKmh: 6, durationMin: 20 }
+  if (mode === 'reps-only')  return { reps: 10 }
   return { reps: 8 }
 }
 

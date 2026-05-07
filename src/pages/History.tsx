@@ -4,32 +4,31 @@ import useHistory from '../hooks/useHistory'
 import CalendarView from '../components/CalendarView'
 import { updateSession, deleteSession } from '../lib/sessions'
 import { firestore } from '../lib/firebase'
-import { updateWeightEntry, deleteWeightEntry } from '../lib/weights'
 import useMachines from '../hooks/useMachines'
-import type { Session, SetItem, WeightEntry } from '../types/firestore'
+import type { Session, SetItem } from '../types/firestore'
 import { getSetInputMode } from '../types/firestore'
 
 /** Résumé d'une série selon le mode de saisie */
 function formatSetSummary(s: SetItem, machineId: string): string {
   const mode = getSetInputMode(machineId)
-  if (mode === 'planche')  return s.durationSec !== undefined ? `${s.durationSec}s` : '—'
-  if (mode === 'climber')  return [s.powerPercent !== undefined ? `${s.powerPercent}%` : null, s.durationMin !== undefined ? `${s.durationMin}min` : null].filter(Boolean).join(' · ') || '—'
-  if (mode === 'tapis')    return [s.slope !== undefined ? `${s.slope}%` : null, s.speedKmh !== undefined ? `${s.speedKmh}km/h` : null, s.durationMin !== undefined ? `${s.durationMin}min` : null].filter(Boolean).join(' · ') || '—'
+  if (mode === 'planche')   return s.durationSec !== undefined ? `${s.durationSec}s` : '—'
+  if (mode === 'climber')   return [s.powerPercent !== undefined ? `${s.powerPercent}` : null, s.durationMin !== undefined ? `${s.durationMin}min` : null].filter(Boolean).join(' · ') || '—'
+  if (mode === 'tapis')     return [s.slope !== undefined ? `${s.slope}` : null, s.speedKmh !== undefined ? `${s.speedKmh}km/h` : null, s.durationMin !== undefined ? `${s.durationMin}min` : null].filter(Boolean).join(' · ') || '—'
+  if (mode === 'reps-only') return s.reps !== undefined ? `${s.reps} reps` : '—'
   return `${s.reps ?? 0}r${s.weightKg ? ` × ${s.weightKg}kg` : ''}`
 }
 
-// ─── Mini SVG area chart ───────────────────────────────────────────────────
-function MiniChart({ data, height = 64 }: { data: { date: string; value: number }[]; height?: number }) {
+// ─── Helpers ───────────────────────────────────────────────────────────────
+function MiniChart({ data, height = 64, unit = 'kg' }: { data: { date: string; value: number }[]; height?: number; unit?: string }) {
   if (data.length === 0) return null
   const W = 300, H = height, PAD = 12
 
-  // Single point: show centered dot with label
   if (data.length === 1) {
     return (
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height }}>
         <circle cx={W / 2} cy={H / 2} r={5} fill="var(--color-primary)" />
         <text x={W / 2} y={H / 2 - 12} fill="var(--color-primary)" fontSize={10} textAnchor="middle" fontWeight="bold">
-          {data[0].value} kg
+          {data[0].value}{unit ? ` ${unit}` : ''}
         </text>
         <text x={W / 2} y={H / 2 + 16} fill="var(--muted)" fontSize={8} textAnchor="middle">
           {new Date(data[0].date + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
@@ -64,15 +63,12 @@ function MiniChart({ data, height = 64 }: { data: { date: string; value: number 
       {pts.map(([x, y], i) => (
         <circle key={i} cx={x} cy={y} r={i === pts.length - 1 ? 4 : 2.5} fill="var(--color-primary)" />
       ))}
-      {/* First label */}
       <text x={first[0]} y={H - 1} fill="var(--muted)" fontSize={8} textAnchor="start">
         {new Date(data[0].date + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
       </text>
-      {/* Last value label */}
       <text x={last[0]} y={last[1] - 7} fill="var(--color-primary)" fontSize={10} textAnchor="middle" fontWeight="bold">
-        {data[data.length - 1].value} kg
+        {data[data.length - 1].value}{unit ? ` ${unit}` : ''}
       </text>
-      {/* Last date label */}
       <text x={last[0]} y={H - 1} fill="var(--muted)" fontSize={8} textAnchor="end">
         {new Date(data[data.length - 1].date + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
       </text>
@@ -80,7 +76,6 @@ function MiniChart({ data, height = 64 }: { data: { date: string; value: number 
   )
 }
 
-// ─── Helpers ───────────────────────────────────────────────────────────────
 function StatTile({ value, label }: { value: string | number; label: string }) {
   return (
     <div className="rounded-xl p-3" style={{ background: 'var(--surface)', border: '1px solid var(--glass-border)' }}>
@@ -169,8 +164,10 @@ function SessionCard({
       </button>
       {progressionData && progressionData.length >= 1 && (
         <div className="px-4 pb-3 pt-1" style={{ borderTop: '1px solid var(--glass-border)' }}>
-          <p className="text-[9px] font-bold tracking-widest mb-1" style={{ color: 'var(--muted)' }}>PROGRESSION — CHARGE MAX</p>
-          <MiniChart data={progressionData} height={56} />
+          <p className="text-[9px] font-bold tracking-widest mb-1" style={{ color: 'var(--muted)' }}>
+            PROGRESSION — {getProgressionLabel(getSetInputMode(session.machineId)).title}
+          </p>
+          <MiniChart data={progressionData} height={56} unit={getProgressionLabel(getSetInputMode(session.machineId)).unit} />
         </div>
       )}
     </div>
@@ -227,14 +224,16 @@ function SessionEditPopup({
         <div className="overflow-y-auto flex-1 px-5 py-4 space-y-3">
           {(() => {
             const mode = getSetInputMode(session.machineId)
-            const isPlanche = mode === 'planche'
-            const isClimber = mode === 'climber'
-            const isTapis   = mode === 'tapis'
-            const gridCols  = isTapis ? '56px 1fr 1fr 1fr 36px' : isClimber ? '56px 1fr 1fr 36px' : isPlanche ? '56px 1fr 36px' : '56px 1fr 1fr 36px'
-            const headers   = isTapis
+            const isPlanche  = mode === 'planche'
+            const isClimber  = mode === 'climber'
+            const isTapis    = mode === 'tapis'
+            const isRepsOnly = mode === 'reps-only'
+            const gridCols   = isTapis ? '56px 1fr 1fr 1fr 36px' : isClimber ? '56px 1fr 1fr 36px' : (isPlanche || isRepsOnly) ? '56px 1fr 36px' : '56px 1fr 1fr 36px'
+            const headers    = isTapis
               ? ['SÉRIE', 'PENTE', 'VITESSE', 'DURÉE', '']
-              : isClimber ? ['SÉRIE', 'PUIS.', 'DURÉE', '']
-              : isPlanche ? ['SÉRIE', 'DURÉE', '']
+              : isClimber  ? ['SÉRIE', 'PUIS.', 'DURÉE', '']
+              : isPlanche  ? ['SÉRIE', 'DURÉE', '']
+              : isRepsOnly ? ['SÉRIE', 'RÉPÉTITIONS', '']
               : ['SÉRIE', 'REPS', 'POIDS', '']
 
             return (<>
@@ -252,21 +251,25 @@ function SessionEditPopup({
                     <EditCell value={set.durationSec} unit="sec" inputMode="numeric"
                       onChange={(v) => updateSet(i, { durationSec: v })} primary />
                   )}
+                  {isRepsOnly && (
+                    <EditCell value={set.reps} unit="reps" inputMode="numeric"
+                      onChange={(v) => updateSet(i, { reps: v })} primary />
+                  )}
                   {isClimber && (<>
-                    <EditCell value={set.powerPercent} unit="%" inputMode="numeric" min={0} max={100}
+                    <EditCell value={set.powerPercent} unit="" inputMode="numeric" min={0} max={100}
                       onChange={(v) => updateSet(i, { powerPercent: v })} primary />
                     <EditCell value={set.durationMin} unit="min" inputMode="decimal"
                       onChange={(v) => updateSet(i, { durationMin: v })} />
                   </>)}
                   {isTapis && (<>
-                    <EditCell value={set.slope} unit="%" inputMode="numeric" min={0} max={100}
+                    <EditCell value={set.slope} unit="" inputMode="numeric" min={0} max={100}
                       onChange={(v) => updateSet(i, { slope: v })} primary />
                     <EditCell value={set.speedKmh} unit="km/h" inputMode="decimal"
                       onChange={(v) => updateSet(i, { speedKmh: v })} />
                     <EditCell value={set.durationMin} unit="min" inputMode="decimal"
                       onChange={(v) => updateSet(i, { durationMin: v })} />
                   </>)}
-                  {!isPlanche && !isClimber && !isTapis && (<>
+                  {!isPlanche && !isRepsOnly && !isClimber && !isTapis && (<>
                     <EditCell value={set.reps} unit="r" inputMode="numeric"
                       onChange={(v) => updateSet(i, { reps: v })} primary />
                     <EditCell value={set.weightKg} unit="kg" inputMode="decimal" placeholder="—"
@@ -323,226 +326,28 @@ function SessionEditPopup({
   )
 }
 
-// ─── Weight entry row (inline edit) ───────────────────────────────────────
-function WeightEntryRow({
-  entry,
-  onSave,
-  onDelete,
-}: {
-  entry: WeightEntry & { dateISO: string }
-  onSave: (id: string, weightKg: number, dateISO: string) => Promise<void>
-  onDelete: (id: string) => Promise<void>
-}) {
-  const [editing, setEditing] = useState(false)
-  const [weightVal, setWeightVal] = useState(entry.weightKg.toFixed(2))
-  const [dateVal, setDateVal] = useState(entry.dateISO)
-  const [saving, setSaving] = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState(false)
-
-  const handleSave = async () => {
-    const kg = parseFloat(weightVal)
-    if (isNaN(kg) || kg <= 0) return
-    setSaving(true)
-    try { await onSave(entry.id!, kg, dateVal) } finally { setSaving(false) }
-  }
-
-  if (editing) {
-    return (
-      <div className="flex items-center gap-2 px-4 py-3" style={{ borderTop: '1px solid var(--glass-border)' }}>
-        <input
-          type="date"
-          value={dateVal}
-          max={new Date().toISOString().slice(0, 10)}
-          onChange={(e) => setDateVal(e.target.value)}
-          className="flex-1 rounded-lg px-2 py-1.5 text-xs font-medium focus:outline-none"
-          style={{ background: 'var(--input-bg)', border: '1px solid var(--glass-border)', color: 'var(--text)', colorScheme: 'dark' }}
-        />
-        <div className="flex items-center gap-1 rounded-lg px-2 py-1.5" style={{ background: 'var(--input-bg)', border: '1px solid var(--color-primary)' }}>
-          <input
-            type="number"
-            inputMode="decimal"
-            value={weightVal}
-            onChange={(e) => setWeightVal(e.target.value)}
-            className="w-16 bg-transparent text-center text-sm font-bold focus:outline-none"
-            style={{ color: 'var(--text)' }}
-          />
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>kg</span>
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="w-8 h-8 rounded-full flex items-center justify-center"
-          style={{ background: 'rgba(59,126,248,0.15)', color: 'var(--color-primary)' }}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-        </button>
-        <button
-          onClick={() => setEditing(false)}
-          className="w-8 h-8 rounded-full flex items-center justify-center"
-          style={{ background: 'var(--surface-2)', color: 'var(--muted)' }}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex items-center justify-between px-4 py-3" style={{ borderTop: '1px solid var(--glass-border)' }}>
-      <div>
-        <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
-          {entry.weightKg.toFixed(2)} <span className="font-normal text-xs" style={{ color: 'var(--muted)' }}>kg</span>
-        </p>
-        <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-          {new Date(entry.dateISO + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
-        </p>
-      </div>
-      {!confirmDelete ? (
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setEditing(true)}
-            className="w-8 h-8 rounded-full flex items-center justify-center"
-            style={{ background: 'var(--surface-2)', color: 'var(--muted)' }}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-          </button>
-          <button
-            onClick={() => setConfirmDelete(true)}
-            className="w-8 h-8 rounded-full flex items-center justify-center"
-            style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </button>
-        </div>
-      ) : (
-        <div className="flex items-center gap-2">
-          <span className="text-xs" style={{ color: '#ef4444' }}>Supprimer ?</span>
-          <button
-            onClick={() => onDelete(entry.id!)}
-            className="px-3 py-1 rounded-lg text-xs font-bold text-white"
-            style={{ background: '#ef4444' }}
-          >
-            Oui
-          </button>
-          <button
-            onClick={() => setConfirmDelete(false)}
-            className="px-3 py-1 rounded-lg text-xs font-semibold"
-            style={{ background: 'var(--surface-2)', color: 'var(--text)' }}
-          >
-            Non
-          </button>
-        </div>
-      )}
-    </div>
-  )
+// ─── Progression helpers ───────────────────────────────────────────────────
+function getProgressionMetric(set: SetItem, mode: ReturnType<typeof getSetInputMode>): number {
+  if (mode === 'planche')   return set.durationSec ?? 0
+  if (mode === 'climber')   return set.powerPercent ?? 0
+  if (mode === 'tapis')     return set.slope ?? 0
+  if (mode === 'reps-only') return set.reps ?? 0
+  return set.weightKg ?? 0
 }
 
-// ─── Weight section ────────────────────────────────────────────────────────
-function WeightSection({
-  weights,
-  uid,
-  onReload,
-}: {
-  weights: WeightEntry[]
-  uid: string | null
-  onReload: () => Promise<void>
-}) {
-  const today = new Date().toISOString().slice(0, 10)
-
-  // Convert Timestamp to ISO date string
-  const toISO = (entry: WeightEntry): string => {
-    try {
-      if (typeof (entry.date as any).toDate === 'function') {
-        return (entry.date as any).toDate().toISOString().slice(0, 10)
-      }
-    } catch {}
-    return today
-  }
-
-  const enriched = useMemo(
-    () =>
-      weights.map((w) => ({ ...w, dateISO: toISO(w) })).sort((a, b) => b.dateISO.localeCompare(a.dateISO)),
-    [weights]
-  )
-
-  const chartData = useMemo(
-    () =>
-      [...enriched]
-        .sort((a, b) => a.dateISO.localeCompare(b.dateISO))
-        .map((w) => ({ date: w.dateISO, value: w.weightKg })),
-    [enriched]
-  )
-
-  const handleSave = async (id: string, weightKg: number, dateISO: string) => {
-    if (!uid) return
-    await updateWeightEntry(firestore, uid, id, { weightKg, dateISO })
-    await onReload()
-  }
-
-  const handleDelete = async (id: string) => {
-    if (!uid) return
-    await deleteWeightEntry(firestore, uid, id)
-    await onReload()
-  }
-
-  return (
-    <div>
-      <p className="text-[10px] font-bold tracking-widest mb-2" style={{ color: 'var(--muted)' }}>
-        SUIVI DU POIDS
-      </p>
-
-      {chartData.length >= 1 && (
-        <div className="rounded-2xl p-4 mb-3" style={{ background: 'var(--surface)', border: '1px solid var(--glass-border)' }}>
-          <div className="flex items-end justify-between mb-3">
-            <p className="text-[10px] font-bold tracking-widest" style={{ color: 'var(--muted)' }}>
-              ÉVOLUTION DU POIDS (kg)
-            </p>
-            {enriched.length > 0 && (
-              <p className="text-lg font-bold" style={{ color: 'var(--color-primary)' }}>
-                {enriched[0].weightKg.toFixed(2)} kg
-              </p>
-            )}
-          </div>
-          <MiniChart data={chartData} height={96} />
-        </div>
-      )}
-
-      {enriched.length === 0 ? (
-        <EmptyState text="Aucune pesée enregistrée" />
-      ) : (
-        <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--glass-border)' }}>
-          <div className="px-4 py-2" style={{ borderBottom: '1px solid var(--glass-border)' }}>
-            <p className="text-[10px] font-bold tracking-widest" style={{ color: 'var(--muted)' }}>
-              HISTORIQUE DES PESÉES
-            </p>
-          </div>
-          {enriched.map((entry) => (
-            <WeightEntryRow
-              key={entry.id}
-              entry={entry}
-              onSave={handleSave}
-              onDelete={handleDelete}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  )
+function getProgressionLabel(mode: ReturnType<typeof getSetInputMode>): { title: string; unit: string } {
+  if (mode === 'planche')   return { title: 'DURÉE MAX', unit: 'sec' }
+  if (mode === 'climber')   return { title: 'PUISSANCE MAX', unit: '' }
+  if (mode === 'tapis')     return { title: 'PENTE MAX', unit: '' }
+  if (mode === 'reps-only') return { title: 'RÉPÉTITIONS MAX', unit: 'reps' }
+  return { title: 'CHARGE MAX', unit: 'kg' }
 }
 
 // ─── Main page ─────────────────────────────────────────────────────────────
 export default function History() {
   const { user } = useAuth()
   const uid = user?.uid ?? null
-  const { sessions, weights, loading, reload } = useHistory(uid)
+  const { sessions, loading, reload } = useHistory(uid)
   const { machines } = useMachines()
 
   const [view, setView] = useState<'date' | 'machine'>('date')
@@ -550,13 +355,12 @@ export default function History() {
   const [selectedMachineId, setSelectedMachineId] = useState<string | null>(null)
   const [selectedSession, setSelectedSession] = useState<Session | null>(null)
 
-  const totalSets = useMemo(() => sessions.reduce((acc, s) => acc + (s.sets?.length ?? 0), 0), [sessions])
   const uniqueMachines = useMemo(() => new Set(sessions.map((s) => s.machineId)).size, [sessions])
-  const latestWeight = weights.length > 0 ? weights[0].weightKg : null
 
   const markedDates = useMemo(() => sessions.map((s) => new Date(s.date + 'T12:00:00')), [sessions])
   const sessionsForDay = useMemo(() => {
-    const day = selectedDate.toISOString().slice(0, 10)
+    const d = selectedDate
+    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
     return sessions.filter((s) => s.date === day)
   }, [sessions, selectedDate])
 
@@ -581,12 +385,14 @@ export default function History() {
     return sessions.filter((s) => s.machineId === selectedMachineId).sort((a, b) => b.date.localeCompare(a.date))
   }, [sessions, selectedMachineId])
 
-  const getProgressionData = (machineId: string) =>
-    sessions
+  const getProgressionData = (machineId: string) => {
+    const mode = getSetInputMode(machineId)
+    return sessions
       .filter((s) => s.machineId === machineId)
       .sort((a, b) => a.date.localeCompare(b.date))
-      .map((s) => ({ date: s.date, value: Math.max(0, ...s.sets.map((set) => set.weightKg ?? 0)) }))
+      .map((s) => ({ date: s.date, value: Math.max(0, ...s.sets.map((set) => getProgressionMetric(set, mode))) }))
       .filter((d) => d.value > 0)
+  }
 
   const handleSaveEdit = async (s: Session, sets: SetItem[], restSeconds: number) => {
     await updateSession(firestore, s.userId, s.id!, { sets, restSeconds })
@@ -613,8 +419,6 @@ export default function History() {
         <div className="grid grid-cols-2 gap-3">
           <StatTile value={sessions.length} label="Sessions (30 jours)" />
           <StatTile value={uniqueMachines} label="Machines différentes" />
-          <StatTile value={totalSets} label="Séries au total" />
-          <StatTile value={latestWeight !== null ? `${latestWeight.toFixed(2)} kg` : '—'} label="Mon poids" />
         </div>
 
         {/* View toggle */}
@@ -675,8 +479,10 @@ export default function History() {
 
                 {getProgressionData(selectedMachineId).length >= 1 && (
                   <div className="rounded-xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--glass-border)' }}>
-                    <p className="text-[10px] font-bold tracking-widest mb-3" style={{ color: 'var(--muted)' }}>PROGRESSION — CHARGE MAXIMALE (kg)</p>
-                    <MiniChart data={getProgressionData(selectedMachineId)} height={80} />
+                    <p className="text-[10px] font-bold tracking-widest mb-3" style={{ color: 'var(--muted)' }}>
+                      PROGRESSION — {getProgressionLabel(getSetInputMode(selectedMachineId)).title} ({getProgressionLabel(getSetInputMode(selectedMachineId)).unit})
+                    </p>
+                    <MiniChart data={getProgressionData(selectedMachineId)} height={80} unit={getProgressionLabel(getSetInputMode(selectedMachineId)).unit} />
                   </div>
                 )}
 
@@ -720,9 +526,6 @@ export default function History() {
             )}
           </>
         )}
-
-        {/* ── WEIGHT TRACKING ── */}
-        <WeightSection weights={weights} uid={uid} onReload={reload} />
       </div>
 
       {selectedSession && (
